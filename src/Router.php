@@ -236,6 +236,8 @@ final class Router
      */
     public function dispatch(Request $request, Response $response): void
     {
+        $pathMatches = [];
+
         foreach ($this->routes as $route) {
             if ($route->matches($request)) {
                 $params = $route->extractParams($request->getPath());
@@ -245,11 +247,21 @@ final class Router
 
                 return;
             }
+
+            if ($route->matchesPath($request->getPath())) {
+                $pathMatches[] = $route->getMethod();
+            }
         }
 
-        throw new RouteNotFoundException(
-            sprintf('No route found for %s %s', $request->getMethod(), $request->getPath()),
-        );
+        if ($pathMatches !== []) {
+            throw MethodNotAllowedException::forRequest(
+                $request->getMethod(),
+                $request->getPath(),
+                $pathMatches,
+            );
+        }
+
+        throw RouteNotFoundException::forRequest($request->getMethod(), $request->getPath());
     }
 
     // -------------------------------------------------------------------------
