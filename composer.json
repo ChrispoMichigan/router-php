@@ -1,5 +1,5 @@
 {
-    "name": "chrispo/router-php",
+    "name": "chrispo/routex-php",
     "description": "Simple router for PHP",
     "type": "library",
     "license": "MIT",
