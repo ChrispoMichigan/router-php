@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Chrispo\RouterPhp;
 
 use Chrispo\RouterPhp\Exceptions\InvalidRouteException;
+use Chrispo\RouterPhp\Middleware\MiddlewareInterface;
 
 /**
  * Route — Ruta HTTP individual.
@@ -25,6 +26,13 @@ use Chrispo\RouterPhp\Exceptions\InvalidRouteException;
  */
 final class Route
 {
+    /**
+     * Middleware stack asignado a esta ruta.
+     *
+     * @var MiddlewareInterface[]
+     */
+    private array $middlewares = [];
+
     /** Regex compilado a partir del patrón de URL. */
     private readonly string $pattern;
 
@@ -123,6 +131,28 @@ final class Route
         $handler = $this->handler;
 
         return $handler;
+    }
+
+    /**
+     * Adjunta uno o más middlewares a esta ruta (se ejecutan antes del handler).
+     *
+     * @param MiddlewareInterface ...$middlewares
+     */
+    public function middleware(MiddlewareInterface ...$middlewares): static
+    {
+        array_push($this->middlewares, ...$middlewares);
+
+        return $this;
+    }
+
+    /**
+     * Devuelve el stack de middlewares asignados a esta ruta.
+     *
+     * @return MiddlewareInterface[]
+     */
+    public function getMiddlewares(): array
+    {
+        return $this->middlewares;
     }
 
     /** Devuelve el regex compilado (útil para debug y tests). */

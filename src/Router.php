@@ -6,6 +6,7 @@ namespace Chrispo\RouterPhp;
 
 use Chrispo\RouterPhp\Exceptions\MethodNotAllowedException;
 use Chrispo\RouterPhp\Exceptions\RouteNotFoundException;
+use Chrispo\RouterPhp\Middleware\MiddlewareInterface;
 
 /**
  * Router — Facade principal del enrutador.
@@ -41,6 +42,13 @@ final class Router
     /** @var Route[] Colección de rutas registradas */
     private array $routes = [];
 
+    /**
+     * Middleware globales — se ejecutan antes del middleware de cada ruta.
+     *
+     * @var MiddlewareInterface[]
+     */
+    private array $middlewares = [];
+
     /** @var callable|null Handler personalizado para 404 */
     private mixed $notFoundHandler = null;
 
@@ -59,7 +67,7 @@ final class Router
      *
      * @param callable(Request, Response): void $handler
      */
-    public function get(string $path, callable $handler): static
+    public function get(string $path, callable $handler): Route
     {
         return $this->addRoute('GET', $path, $handler);
     }
@@ -69,7 +77,7 @@ final class Router
      *
      * @param callable(Request, Response): void $handler
      */
-    public function post(string $path, callable $handler): static
+    public function post(string $path, callable $handler): Route
     {
         return $this->addRoute('POST', $path, $handler);
     }
@@ -79,7 +87,7 @@ final class Router
      *
      * @param callable(Request, Response): void $handler
      */
-    public function put(string $path, callable $handler): static
+    public function put(string $path, callable $handler): Route
     {
         return $this->addRoute('PUT', $path, $handler);
     }
@@ -89,7 +97,7 @@ final class Router
      *
      * @param callable(Request, Response): void $handler
      */
-    public function delete(string $path, callable $handler): static
+    public function delete(string $path, callable $handler): Route
     {
         return $this->addRoute('DELETE', $path, $handler);
     }
@@ -99,7 +107,7 @@ final class Router
      *
      * @param callable(Request, Response): void $handler
      */
-    public function patch(string $path, callable $handler): static
+    public function patch(string $path, callable $handler): Route
     {
         return $this->addRoute('PATCH', $path, $handler);
     }
@@ -109,7 +117,7 @@ final class Router
      *
      * @param callable(Request, Response): void $handler
      */
-    public function options(string $path, callable $handler): static
+    public function options(string $path, callable $handler): Route
     {
         return $this->addRoute('OPTIONS', $path, $handler);
     }
@@ -150,12 +158,40 @@ final class Router
         $normalizedPrefix = rtrim($prefix, '/');
 
         foreach ($proxy->getRoutes() as $route) {
-            $this->addRoute(
+            // Merge: group-level global middleware + route-specific middleware
+            $groupMiddlewares = array_merge($proxy->getMiddlewares(), $route->getMiddlewares());
+
+            $newRoute = $this->addRoute(
                 method:  $route->getMethod(),
                 path:    $normalizedPrefix . '/' . ltrim($route->getPath(), '/'),
                 handler: $route->getHandler(),
             );
+
+            if ($groupMiddlewares !== []) {
+                $newRoute->middleware(...$groupMiddlewares);
+            }
         }
+
+        return $this;
+    }
+
+    // -------------------------------------------------------------------------
+    // Middleware global
+    // -------------------------------------------------------------------------
+
+    /**
+     * Registra uno o más middlewares globales (se aplican a todas las rutas).
+     *
+     * Dentro de un grupo, los middlewares aplican solo a las rutas del grupo.
+     *
+     * @param MiddlewareInterface ...$middlewares
+     *
+     * @example
+     *   $router->use(new CorsMiddleware(), new LogMiddleware());
+     */
+    public function use(MiddlewareInterface ...$middlewares): static
+    {
+        array_push($this->middlewares, ...$middlewares);
 
         return $this;
     }
@@ -243,7 +279,10 @@ final class Router
                 $params = $route->extractParams($request->getPath());
                 $request->setParams($params);
 
-                ($route->getHandler())($request, $response);
+                // Global middleware + route-specific middleware → handler
+                $middlewares = array_merge($this->middlewares, $route->getMiddlewares());
+                $pipeline    = $this->buildPipeline($middlewares, $route->getHandler());
+                $pipeline($request, $response);
 
                 return;
             }
@@ -275,15 +314,17 @@ final class Router
      *
      * @param callable(Request, Response): void $handler
      */
-    public function addRoute(string $method, string $path, callable $handler): static
+    public function addRoute(string $method, string $path, callable $handler): Route
     {
-        $this->routes[] = new Route(
+        $route = new Route(
             method:  strtoupper($method),
             path:    $path,
             handler: $handler,
         );
 
-        return $this;
+        $this->routes[] = $route;
+
+        return $route;
     }
 
     /**
@@ -294,6 +335,16 @@ final class Router
     public function getRoutes(): array
     {
         return $this->routes;
+    }
+
+    /**
+     * Devuelve los middlewares globales registrados con use().
+     *
+     * @return MiddlewareInterface[]
+     */
+    public function getMiddlewares(): array
+    {
+        return $this->middlewares;
     }
 
     // -------------------------------------------------------------------------
@@ -351,5 +402,27 @@ final class Router
             'message' => $e->getMessage(),
             'status'  => 500,
         ]);
+    }
+
+    /**
+     * Construye el pipeline de middleware usando Chain of Responsibility.
+     *
+     * Reduce el stack en orden inverso para que el primer middleware
+     * registrado sea el primero en ejecutarse (outer-to-inner).
+     *
+     * @param MiddlewareInterface[]               $middlewares
+     * @param callable(Request, Response): void   $handler
+     * @return callable(Request, Response): void
+     */
+    private function buildPipeline(array $middlewares, callable $handler): callable
+    {
+        $core = static fn (Request $req, Response $res) => $handler($req, $res);
+
+        return array_reduce(
+            array_reverse($middlewares),
+            static fn (callable $next, MiddlewareInterface $mw): callable =>
+                static fn (Request $req, Response $res) => $mw->handle($req, $res, $next),
+            $core,
+        );
     }
 }

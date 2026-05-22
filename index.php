@@ -20,15 +20,85 @@ declare(strict_types=1);
 require_once __DIR__ . '/vendor/autoload.php';
 
 use Chrispo\RouterPhp\Exceptions\MethodNotAllowedException;
+use Chrispo\RouterPhp\Middleware\MiddlewareInterface;
 use Chrispo\RouterPhp\Request;
 use Chrispo\RouterPhp\Response;
 use Chrispo\RouterPhp\Router;
+
+// =============================================================================
+// Middlewares de ejemplo
+// =============================================================================
+
+/**
+ * CorsMiddleware — añade cabeceras CORS a todas las respuestas.
+ * Ejemplo de middleware global (no corta la cadena).
+ */
+final class CorsMiddleware implements MiddlewareInterface
+{
+    public function handle(Request $request, Response $response, callable $next): void
+    {
+        $response->withHeaders([
+            'Access-Control-Allow-Origin'  => '*',
+            'Access-Control-Allow-Methods' => 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers' => 'Content-Type, Authorization',
+        ]);
+
+        $next($request, $response);
+    }
+}
+
+/**
+ * AuthMiddleware — protege rutas verificando la cabecera Authorization.
+ * Ejemplo de middleware que puede cortar la cadena.
+ *
+ * Probar sin token: curl http://localhost:8000/admin/dashboard
+ * Probar con token: curl -H "Authorization: Bearer secret" http://localhost:8000/admin/dashboard
+ */
+final class AuthMiddleware implements MiddlewareInterface
+{
+    public function handle(Request $request, Response $response, callable $next): void
+    {
+        $token = $request->header('Authorization');
+
+        if ($token === '' || !str_starts_with($token, 'Bearer ')) {
+            // Corta la cadena — handler nunca se ejecuta
+            $response->status(401)->json([
+                'error'   => 'Unauthorized',
+                'message' => 'Bearer token required',
+            ]);
+
+            return;
+        }
+
+        $next($request, $response);
+    }
+}
+
+/**
+ * LogMiddleware — registra método y path de cada petición.
+ * Ejemplo de middleware con lógica pre y post handler.
+ */
+final class LogMiddleware implements MiddlewareInterface
+{
+    public function handle(Request $request, Response $response, callable $next): void
+    {
+        $start = microtime(true);
+
+        $next($request, $response); // Ejecuta el resto de la cadena
+
+        $ms = round((microtime(true) - $start) * 1000, 2);
+        error_log(sprintf('[%s] %s %s — %dms', date('H:i:s'), $request->getMethod(), $request->getPath(), $ms));
+    }
+}
 
 $router = new Router();
 
 // =============================================================================
 // Rutas simples
 // =============================================================================
+
+// Middleware global: aplica a TODAS las rutas
+$router->use(new CorsMiddleware(), new LogMiddleware());
 
 // GET / — página de bienvenida
 $router->get('/', function (Request $req, Response $res): void {
@@ -158,6 +228,33 @@ $router->get('/posts/:year/:month/:slug', function (Request $req, Response $res)
         'slug'  => $req->param('slug'),
     ]);
 });
+
+// =============================================================================
+// Grupo protegido con middleware de autenticación
+// Probar: curl -H "Authorization: Bearer secret" http://localhost:8000/admin/dashboard
+// =============================================================================
+
+$router->group('/admin', function (Router $r): void {
+    // Middleware de grupo: solo aplica a rutas dentro de /admin
+    $r->use(new AuthMiddleware());
+
+    $r->get('/dashboard', function (Request $req, Response $res): void {
+        $res->json(['page' => 'dashboard', 'user' => 'admin']);
+    });
+
+    $r->get('/settings', function (Request $req, Response $res): void {
+        $res->json(['page' => 'settings', 'theme' => 'dark']);
+    });
+});
+
+// =============================================================================
+// Ruta con middleware específico (sin proteger todo el grupo)
+// Probar: curl -H "Authorization: Bearer secret" http://localhost:8000/reports
+// =============================================================================
+
+$router->get('/reports', function (Request $req, Response $res): void {
+    $res->json(['reports' => ['monthly', 'weekly']]);
+})->middleware(new AuthMiddleware());  // Solo esta ruta requiere auth
 
 // =============================================================================
 // Redirección

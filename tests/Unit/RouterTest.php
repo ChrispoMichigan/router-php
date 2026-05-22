@@ -27,10 +27,10 @@ describe('Router registration', function (): void {
 
     it('registers PUT, DELETE, PATCH, OPTIONS routes', function (): void {
         $router = new Router();
-        $router->put('/a', fn ($req, $res) => null)
-            ->delete('/b', fn ($req, $res) => null)
-            ->patch('/c', fn ($req, $res) => null)
-            ->options('/d', fn ($req, $res) => null);
+        $router->put('/a', fn ($req, $res) => null);
+        $router->delete('/b', fn ($req, $res) => null);
+        $router->patch('/c', fn ($req, $res) => null);
+        $router->options('/d', fn ($req, $res) => null);
 
         expect($router->getRoutes())->toHaveCount(4);
     });
@@ -42,17 +42,17 @@ describe('Router registration', function (): void {
         expect($router->getRoutes())->toHaveCount(6);
     });
 
-    it('get() returns static for fluent chaining', function (): void {
+    it('get() returns Route instance', function (): void {
         $router   = new Router();
         $returned = $router->get('/a', fn ($req, $res) => null);
 
-        expect($returned)->toBe($router);
+        expect($returned)->toBeInstanceOf(Route::class);
     });
 
-    it('post() returns static for fluent chaining', function (): void {
+    it('post() returns Route instance', function (): void {
         $router = new Router();
 
-        expect($router->post('/a', fn ($req, $res) => null))->toBe($router);
+        expect($router->post('/a', fn ($req, $res) => null))->toBeInstanceOf(Route::class);
     });
 
     it('group() prefixes all nested routes', function (): void {
