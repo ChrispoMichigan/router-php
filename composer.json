@@ -1,0 +1,13 @@
+{
+    "name": "chrispo/router-php",
+    "description": "Simple router for PHP",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Chrispo",
+            "email": "christiancastillo0350@gmail.com"
+        }
+    ],
+    "require": {}
+}
