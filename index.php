@@ -75,10 +75,10 @@ final class AuthMiddleware implements MiddlewareInterface
 }
 
 /**
- * LogMiddleware — registra método y path de cada petición.
+ * TimingMiddleware — registra método, path y tiempo de cada petición.
  * Ejemplo de middleware con lógica pre y post handler.
  */
-final class LogMiddleware implements MiddlewareInterface
+final class TimingMiddleware implements MiddlewareInterface
 {
     public function handle(Request $request, Response $response, callable $next): void
     {
@@ -98,14 +98,14 @@ $router = new Router();
 // =============================================================================
 
 // Middleware global: aplica a TODAS las rutas
-$router->use(new CorsMiddleware(), new LogMiddleware());
+$router->use(new TimingMiddleware(), new AuthMiddleware());
 
 // GET / — página de bienvenida
 $router->get('/', function (Request $req, Response $res): void {
     $res->json([
         'message' => 'Bienvenido a chrispo/router-php',
         'version' => '1.0.0',
-        'docs'    => 'https://github.com/chrispo/router-php',
+        'docs'    => 'https://github.com/ChrispoMichigan/router-php',
     ]);
 });
 

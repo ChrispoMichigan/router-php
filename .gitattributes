@@ -1,0 +1,13 @@
+# Exclude non-production files from Composer dist packages (Packagist)
+# When someone runs `composer require chrispo/routex-php`, only src/ is included.
+
+tests/          export-ignore
+benchmarks/     export-ignore
+index.php       export-ignore
+phpbench.json   export-ignore
+.github/        export-ignore
+*.neon          export-ignore
+*.dist          export-ignore
+
+# Normalize line endings
+* text=auto
